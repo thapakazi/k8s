@@ -1,10 +1,11 @@
-image: ubuntu # can be upgraded, depending on your node version used
+image: docker:latest
 
 build:
   stage: build
   services:
     - docker:dind
   script:
+    - apk update && apk add curl
     - bash ./build.sh
   only:
   - master
