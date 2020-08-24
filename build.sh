@@ -16,13 +16,16 @@ build() {
   echo $helm
 
   # aws-iam-authenticator latest
-  iam_auth=$(curl -s https://docs.aws.amazon.com/eks/latest/userguide/install-aws-iam-authenticator.html|grep iam-auth |grep linux|head -1)
-  iam_auth_url=$(echo ${iam_auth} |grep -oP '(?<=curl -o aws-iam-authenticator )[^<]*'|head -1)
-  iam_auth_url="${iam_auth_url}amd64/aws-iam-authenticator"
+  iam_auth=$(curl https://github.com/kubernetes-sigs/aws-iam-authenticator/releases/latest | sed -r 's/.*http.*v(.*)">.*/\1/')
+  iam_auth_url="https://github.com/kubernetes-sigs/aws-iam-authenticator/releases/download/v${iam_auth}/aws-iam-authenticator_${iam_auth}_linux_amd64"
   echo ${iam_auth_url}
 
   echo "Found new version, building the image ${image}:${tag}"
-  docker build --no-cache --build-arg KUBECTL_VERSION=${tag} --build-arg HELM_VERSION=${helm} --build-arg AWS_IAM_AUTH_VERSION_URL="${iam_auth_url}" -t ${image}:${tag} .
+  docker build  --cache-from $CI_REGISTRY_IMAGE:latest \
+         --build-arg KUBECTL_VERSION=${tag} \
+         --build-arg HELM_VERSION=${helm} \
+         --build-arg AWS_IAM_AUTH_VERSION_URL="${iam_auth_url}" \
+         --tag ${image}:${tag} --tag $CI_REGISTRY_IMAGE:latest .
 
   # run test
   version=$(docker run -ti --rm ${image}:${tag} helm version --client)
@@ -40,17 +43,17 @@ build() {
     echo "unmatched"
     exit
   fi
-
-if [[ "$TRAVIS_BRANCH" == "master" && "$TRAVIS_PULL_REQUEST" == false ]]; then
-    docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
-    docker push ${image}:${tag}
-  fi
 }
 
-image="alpine/k8s"
+#login first
+docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
 
-status=$(curl -sL https://hub.docker.com/v2/repositories/${image}/tags/${tag})
-echo $status
-if [[ ( "${status}" =~ "not found" ) || ( ${REBUILD} == "true" ) ]]; then
-   build
-fi
+# build and push image then
+docker pull $CI_REGISTRY_IMAGE:latest || true
+
+#build
+build
+
+#push
+docker push $CI_REGISTRY_IMAGE:${tag}
+docker push $CI_REGISTRY_IMAGE:latest

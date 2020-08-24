@@ -1,0 +1,10 @@
+image: ubuntu # can be upgraded, depending on your node version used
+
+build:
+  stage: build
+  services:
+    - docker:dind
+  script:
+    - bash ./build.sh
+  only:
+  - master
